@@ -2,6 +2,7 @@ package com.housebatch.housebatch.job.apt;
 
 import com.housebatch.housebatch.adapter.ApartmentApiResource;
 import com.housebatch.housebatch.core.dto.AptDealDto;
+import com.housebatch.housebatch.core.repository.LawdRepository;
 import com.housebatch.housebatch.job.validator.FilePathParameterValidator;
 import com.housebatch.housebatch.job.validator.LawdCdParameterValidator;
 import com.housebatch.housebatch.job.validator.YearMonthParameterValidator;
@@ -10,15 +11,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobParametersValidator;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.StepContribution;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.CompositeJobParametersValidator;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.scope.context.ChunkContext;
+import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.xml.StaxEventItemReader;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
+import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,16 +41,18 @@ public class ApartDealInsertJobConfig {
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
     private final ApartmentApiResource apartmentApiResource;
+    private final LawdRepository lawdRepository;
 
     @Bean
     public Job aptDealInsertJob(
-            Step aptDealInsertStep
+            Step guLawdCdStep
+//            Step aptDealInsertStep
     ) {
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
                 //.validator(new FilePathParameterValidator())
-                .validator(aptDealJobParameterValidator())
-                .start(aptDealInsertStep)
+                //.validator(aptDealJobParameterValidator())
+                .start(guLawdCdStep)
                 .build();
     }
 
@@ -61,6 +68,30 @@ public class ApartDealInsertJobConfig {
         ));
 
         return validator;
+    }
+
+    /**
+     * 공공데이터에서 가져와 데이터베이스에 저장한 아파트 실거래가 정보를 호출하여 사용하기 위한 메소드
+     * @return
+     */
+    @Bean
+    @JobScope
+    public Step guLawdCdStep(
+            Tasklet guLawdCdTasklet
+    ) {
+        return stepBuilderFactory.get("guLawdCdStep")
+                .tasklet(guLawdCdTasklet)
+                .build();
+    }
+
+    @Bean
+    @StepScope
+    public Tasklet guLawdCdTasklet() {
+        return (contribution, chunkContext) -> {
+            lawdRepository.findDistinctGuLawdCd()
+                    .forEach(System.out::println);
+            return RepeatStatus.FINISHED;
+        };
     }
 
     @Bean
