@@ -40,7 +40,6 @@ public class ApartDealInsertJobConfig {
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
     private final ApartmentApiResource apartmentApiResource;
-    private final LawdRepository lawdRepository;
 
     @Bean
     public Job aptDealInsertJob(
@@ -63,7 +62,7 @@ public class ApartDealInsertJobConfig {
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
                 //.validator(new FilePathParameterValidator())
-                .validator(aptDealJobParameterValidator())
+                .validator(new YearMonthParameterValidator())
                 .start(guLawdCdStep)
                 .on("CONTINUABLE").to(contextPrintStep).next(guLawdCdStep)  // ExitStatus가 CONTINUABLE로 존재하면 contextPrintStep, guLawdCdStep를 수행
                 .from(guLawdCdStep)                                                // ExitStatus가 CONTINUABLE이 아니면 종료
@@ -71,20 +70,6 @@ public class ApartDealInsertJobConfig {
                 .end()
 //                .next(aptDealInsertStep)
                 .build();
-    }
-
-    /**
-     * Spring Batch에서 다수의 Class파일을 사용한 유효성 체크가 필요한 경우 CompositeJobParametersValidator로 배열에 담아 넘겨주는 기능을 구성한 Method이다.
-     * @return CompositeJobParametersValidator
-     */
-    private JobParametersValidator aptDealJobParameterValidator() {
-        CompositeJobParametersValidator validator = new CompositeJobParametersValidator();
-        validator.setValidators(Arrays.asList(
-                new YearMonthParameterValidator()
-                //, new LawdCdParameterValidator()
-        ));
-
-        return validator;
     }
 
     /**
@@ -101,69 +86,10 @@ public class ApartDealInsertJobConfig {
                 .build();
     }
 
-    /**
-     * ExecutionContext에 저장할 데이터
-     * 1. guLawdCd : 법정동 구 코드로 다음 스텝에서 사용할 값
-     * 2. guLawdCdList : 법정동 구 코드 배열
-     * 3. itemCount : 남아있는 아이템(구 코드)의 개수
-     */
     @Bean
     @StepScope
-    public Tasklet guLawdCdTasklet() {
-        return (contribution, chunkContext) -> {
-            /*
-             * ExecutionContext 사용
-             * 사용하는 경우
-             *   1. 중단된 배치 작업을 이어서 진행하기 위한 경우
-             *   2. Step 간 데이터를 전달이 필요한 경우
-             * 
-             * 동작 방식
-             *   - Spring Batch 실행내역을 Batch 관련 테이블에 메타데이터로 저장
-             *     (데이터베이스 테이블 명 : BATCH_JOB_EXECUTION_CONTEXT)
-             *   - Spring Batch 메타데이터 테이블을 참조하여 필요 데이터 조회
-             */
-            StepExecution stepExecution = chunkContext.getStepContext().getStepExecution();
-            ExecutionContext executionContext = stepExecution.getJobExecution().getExecutionContext();
-
-            /*
-             * 데이터가 존재하면 다음 스텝을 실행, 없으면 종료되도록 진행
-             *   - 데이터가 있는 경우 RepeatStatus.CONTINUABLE 로 동작
-             * 
-             * ExecutionContext에 저장할 데이터
-             * 1. guLawdCd : 법정동 구 코드로 다음 스텝에서 사용할 값
-             * 2. guLawdCdList : 법정동 구 코드 배열
-             * 3. itemCount : 남아있는 아이템(구 코드)의 개수
-             *
-             * [고민해 볼 사항]
-             * ExecutionContext에 데이터베이스에서 불러온 데이터 전체를 저장하는 방식으로 동작
-             * - 매번 데이터베이스 조회하는 방식으로 작성
-             *   - 단점 : 데이터베이스 조회하는 반복 동작으로 시스템 부하 발생
-             *   - 장점 : 대용량의 데이터를 분할 조회하여 자원을 안정적/효율적으로 사용 가능
-             *           (내부에서 제한적으로 사용하는 경우인지, 다수의 고객으로 접근이 많이 발생하는 데이터인 경우인지 고려 필요)
-             */
-            List<String> guLawdCdList = null;
-            if(!executionContext.containsKey("guLawdCdList")) {
-                guLawdCdList = lawdRepository.findDistinctGuLawdCd();
-                executionContext.put("guLawdCdList", guLawdCdList);
-                executionContext.putInt("itemCount", guLawdCdList.size());
-            } else {
-                guLawdCdList = (List<String>) executionContext.get("guLawdCdList");
-            }
-
-            Integer itemCount = executionContext.getInt("itemCount");
-
-            if (itemCount == 0) {
-                contribution.setExitStatus(ExitStatus.COMPLETED);
-                return RepeatStatus.FINISHED;
-            }
-
-            String guLawdCd = guLawdCdList.get(itemCount - 1);
-            executionContext.putString("guLawdCd", guLawdCd);
-            executionContext.putInt("itemCount", itemCount - 1);
-
-            contribution.setExitStatus(new ExitStatus("CONTINUABLE"));
-            return RepeatStatus.FINISHED;
-        };
+    public Tasklet guLawdCdTasklet(LawdRepository lawdRepository) {
+        return new GuLawdTasklet(lawdRepository);
     }
 
     @Bean
