@@ -46,15 +46,30 @@ public class ApartDealInsertJobConfig {
     public Job aptDealInsertJob(
             Step guLawdCdStep
             , Step contextPrintStep
-            , Step aptDealInsertStep
+//            , Step aptDealInsertStep
     ) {
+        /*
+         * Conditional Flow
+         * - 첫 Step의 실행 결과에 따라 다음 Step을 결정하는 분기처리 기능을 제공한다.
+         *
+         * [기본 코드 구조]
+         * 	return jobBuilderFactory.get("jobExample")
+		 *	  .start(stepA())                            // 첫 Step A를 실행
+		 *	  .on("*").to(stepB())                       // 다음 Step B를 실행
+		 *	  .from(stepA()).on("FAILED").to(stepC())    // 다만, Step A의 결과가 "FAILED"인 경우 Step C를 실행
+		 *	  .end()                                     // Conditional Flow 의 종료
+		 *	  .build();
+         */
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
                 //.validator(new FilePathParameterValidator())
                 .validator(aptDealJobParameterValidator())
                 .start(guLawdCdStep)
-                .next(contextPrintStep)
-                .next(aptDealInsertStep)
+                .on("CONTINUABLE").to(contextPrintStep).next(guLawdCdStep)  // ExitStatus가 CONTINUABLE로 존재하면 contextPrintStep, guLawdCdStep를 수행
+                .from(guLawdCdStep)                                                // ExitStatus가 CONTINUABLE이 아니면 종료
+                .on("*").end()
+                .end()
+//                .next(aptDealInsertStep)
                 .build();
     }
 
@@ -86,6 +101,12 @@ public class ApartDealInsertJobConfig {
                 .build();
     }
 
+    /**
+     * ExecutionContext에 저장할 데이터
+     * 1. guLawdCd : 법정동 구 코드로 다음 스텝에서 사용할 값
+     * 2. guLawdCdList : 법정동 구 코드 배열
+     * 3. itemCount : 남아있는 아이템(구 코드)의 개수
+     */
     @Bean
     @StepScope
     public Tasklet guLawdCdTasklet() {
@@ -104,9 +125,43 @@ public class ApartDealInsertJobConfig {
             StepExecution stepExecution = chunkContext.getStepContext().getStepExecution();
             ExecutionContext executionContext = stepExecution.getJobExecution().getExecutionContext();
 
-            List<String> guLawdCds = lawdRepository.findDistinctGuLawdCd();
-            executionContext.putString("guLawdCd", guLawdCds.get(0));
+            /*
+             * 데이터가 존재하면 다음 스텝을 실행, 없으면 종료되도록 진행
+             *   - 데이터가 있는 경우 RepeatStatus.CONTINUABLE 로 동작
+             * 
+             * ExecutionContext에 저장할 데이터
+             * 1. guLawdCd : 법정동 구 코드로 다음 스텝에서 사용할 값
+             * 2. guLawdCdList : 법정동 구 코드 배열
+             * 3. itemCount : 남아있는 아이템(구 코드)의 개수
+             *
+             * [고민해 볼 사항]
+             * ExecutionContext에 데이터베이스에서 불러온 데이터 전체를 저장하는 방식으로 동작
+             * - 매번 데이터베이스 조회하는 방식으로 작성
+             *   - 단점 : 데이터베이스 조회하는 반복 동작으로 시스템 부하 발생
+             *   - 장점 : 대용량의 데이터를 분할 조회하여 자원을 안정적/효율적으로 사용 가능
+             *           (내부에서 제한적으로 사용하는 경우인지, 다수의 고객으로 접근이 많이 발생하는 데이터인 경우인지 고려 필요)
+             */
+            List<String> guLawdCdList = null;
+            if(!executionContext.containsKey("guLawdCdList")) {
+                guLawdCdList = lawdRepository.findDistinctGuLawdCd();
+                executionContext.put("guLawdCdList", guLawdCdList);
+                executionContext.putInt("itemCount", guLawdCdList.size());
+            } else {
+                guLawdCdList = (List<String>) executionContext.get("guLawdCdList");
+            }
 
+            Integer itemCount = executionContext.getInt("itemCount");
+
+            if (itemCount == 0) {
+                contribution.setExitStatus(ExitStatus.COMPLETED);
+                return RepeatStatus.FINISHED;
+            }
+
+            String guLawdCd = guLawdCdList.get(itemCount - 1);
+            executionContext.putString("guLawdCd", guLawdCd);
+            executionContext.putInt("itemCount", itemCount - 1);
+
+            contribution.setExitStatus(new ExitStatus("CONTINUABLE"));
             return RepeatStatus.FINISHED;
         };
     }
