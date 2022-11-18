@@ -1,10 +1,15 @@
 package com.housebatch.housebatch.core.dto;
 
+import com.housebatch.housebatch.core.entity.AptDeal;
+import io.micrometer.core.instrument.util.StringUtils;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 @Getter
 @XmlRootElement(name = "item")
@@ -49,4 +54,23 @@ public class AptDealDto {
 
     @XmlElement(name = "해제여부")
     private String dealCanceled;
+
+    public LocalDate getDealDate() {
+        return LocalDate.of(year, month, day);
+    }
+
+    public Long getDealAmount() {
+        return Long.parseLong(dealAmount.replaceAll(",", "").trim());
+    }
+
+    public boolean isDealCanceled() {
+        return "0".equals(dealCanceled);
+    }
+
+    public LocalDate getDealCanceledDate() {
+        if(StringUtils.isBlank(dealCanceledDate)) {
+            return null;
+        }
+        return LocalDate.parse(dealCanceledDate.trim(), DateTimeFormatter.ofPattern("yy.MM.dd"));
+    }
 }

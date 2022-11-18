@@ -45,6 +45,13 @@ public class GuLawdTasklet implements Tasklet {
             return RepeatStatus.FINISHED;
         }
 
+        /**
+         * ExecutionContext에 데이터 추가 시 문제가 될 수 있는 코드
+         * 아래 코드와 같이 작성하게 되면 'java.lang.UnsupportedOperationException: null' 오류가 발생하게 된다.
+         * 원인은 getJobExecutionContext()의 메소드에서 MAP은 읽기만 가능하고 쓰기는 불가능한 형태이기 때문에 발생하게 된다.
+         * - chunkContext.getStepContext().getJobExecutionContext().put(KEY_GU_LAWD_CD, guLawdCdList.get(itemCount - 1));
+         */
+
         executionContext.putString(KEY_GU_LAWD_CD, guLawdCdList.get(itemCount - 1));
         executionContext.putInt(KEY_ITEM_COUNT, itemCount - 1);
 

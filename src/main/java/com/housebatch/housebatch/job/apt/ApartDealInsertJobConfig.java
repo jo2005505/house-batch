@@ -3,6 +3,7 @@ package com.housebatch.housebatch.job.apt;
 import com.housebatch.housebatch.adapter.ApartmentApiResource;
 import com.housebatch.housebatch.core.dto.AptDealDto;
 import com.housebatch.housebatch.core.repository.LawdRepository;
+import com.housebatch.housebatch.core.service.AptDealService;
 import com.housebatch.housebatch.job.validator.FilePathParameterValidator;
 import com.housebatch.housebatch.job.validator.LawdCdParameterValidator;
 import com.housebatch.housebatch.job.validator.YearMonthParameterValidator;
@@ -44,8 +45,7 @@ public class ApartDealInsertJobConfig {
     @Bean
     public Job aptDealInsertJob(
             Step guLawdCdStep
-            , Step contextPrintStep
-//            , Step aptDealInsertStep
+            , Step aptDealInsertStep
     ) {
         /*
          * Conditional Flow
@@ -64,7 +64,7 @@ public class ApartDealInsertJobConfig {
                 //.validator(new FilePathParameterValidator())
                 .validator(new YearMonthParameterValidator())
                 .start(guLawdCdStep)
-                .on("CONTINUABLE").to(contextPrintStep).next(guLawdCdStep)  // ExitStatus가 CONTINUABLE로 존재하면 contextPrintStep, guLawdCdStep를 수행
+                .on("CONTINUABLE").to(aptDealInsertStep).next(guLawdCdStep)  // ExitStatus가 CONTINUABLE로 존재하면 contextPrintStep, guLawdCdStep를 수행
                 .from(guLawdCdStep)                                                // ExitStatus가 CONTINUABLE이 아니면 종료
                 .on("*").end()
                 .end()
@@ -93,16 +93,6 @@ public class ApartDealInsertJobConfig {
     }
 
     @Bean
-    @JobScope
-    public Step contextPrintStep(
-            Tasklet contextPrintTasklet
-    ) {
-        return stepBuilderFactory.get("contextPrintStep")
-                .tasklet(contextPrintTasklet)
-                .build();
-    }
-
-    @Bean
     @StepScope
     public Tasklet contextPrintTasklet(
             @Value("#{jobExecutionContext['guLawdCd']}") String guLawdCd    // jobExecutionContext로 메타데이터 테이블에서 조회 가능
@@ -121,7 +111,7 @@ public class ApartDealInsertJobConfig {
             , ItemWriter<AptDealDto> aptDealWriter
     ) {
         return stepBuilderFactory.get("aptDealInsertStep")
-                .<AptDealDto, AptDealDto>chunk(10)
+                .<AptDealDto, AptDealDto>chunk(100)
                 .reader(aptDealResourceReader)
                 .writer(aptDealWriter)
                 .build();
@@ -155,8 +145,9 @@ public class ApartDealInsertJobConfig {
 
     @Bean
     @StepScope
-    public ItemWriter<AptDealDto> aptDealWriter() {
+    public ItemWriter<AptDealDto> aptDealWriter(AptDealService aptDealService) {
         return items -> {
+            items.forEach(aptDealService::upsert);
             items.forEach(System.out::println);
             System.out.println("========================== Writing Completed =============================");
         };
