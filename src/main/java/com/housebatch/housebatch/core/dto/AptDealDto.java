@@ -10,6 +10,7 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 @Getter
 @XmlRootElement(name = "item")
@@ -54,6 +55,14 @@ public class AptDealDto {
 
     @XmlElement(name = "해제여부")
     private String dealCanceled;
+
+    /**
+     * 공공 데이터 포털의 API로 아파트 실거래가를 조회 중 <지번>태그가 존재하지 않는 경우가 발생되었으며,
+     * 이를 해결하기 위해 Jibun의 Setter를 직접 작성
+     */
+    public String getJibun() {
+        return Optional.ofNullable(jibun).orElse("");
+    }
 
     public LocalDate getDealDate() {
         return LocalDate.of(year, month, day);

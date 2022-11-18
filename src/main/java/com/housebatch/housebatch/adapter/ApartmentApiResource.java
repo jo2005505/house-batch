@@ -22,7 +22,8 @@ public class ApartmentApiResource {
 
     @Value("${external.apartment-api.path}")
     private String path;
-    @Value("${external.apartment-api.serviceKey}")
+    @Value("${external.apartment-api.serviceKey1}")
+    //@Value("${external.apartment-api.serviceKey2}")
     private String serviceKey;
 
     public Resource getResource(
