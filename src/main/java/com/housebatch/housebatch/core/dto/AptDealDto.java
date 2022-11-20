@@ -73,7 +73,7 @@ public class AptDealDto {
     }
 
     public boolean isDealCanceled() {
-        return "0".equals(dealCanceled);
+        return "O".equals(dealCanceled.trim());
     }
 
     public LocalDate getDealCanceledDate() {
