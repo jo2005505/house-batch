@@ -1,12 +1,14 @@
 package com.housebatch.housebatch.core.dto;
 
 import lombok.Builder;
+import lombok.Getter;
 import org.springframework.data.util.Pair;
 
 import java.text.DecimalFormat;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Getter
 @Builder
 public class NotificationDto {
     private String email;
