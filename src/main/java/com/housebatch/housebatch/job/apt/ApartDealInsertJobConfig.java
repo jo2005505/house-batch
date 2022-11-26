@@ -53,11 +53,11 @@ public class ApartDealInsertJobConfig {
          *
          * [기본 코드 구조]
          * 	return jobBuilderFactory.get("jobExample")
-		 *	  .start(stepA())                            // 첫 Step A를 실행
-		 *	  .on("*").to(stepB())                       // 다음 Step B를 실행
-		 *	  .from(stepA()).on("FAILED").to(stepC())    // 다만, Step A의 결과가 "FAILED"인 경우 Step C를 실행
-		 *	  .end()                                     // Conditional Flow 의 종료
-		 *	  .build();
+         *	  .start(stepA())                            // 첫 Step A를 실행
+         *	  .on("*").to(stepB())                       // 다음 Step B를 실행
+         *	  .from(stepA()).on("FAILED").to(stepC())    // 다만, Step A의 결과가 "FAILED"인 경우 Step C를 실행
+         *	  .end()                                     // Conditional Flow 의 종료
+         *	  .build();
          */
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
@@ -65,7 +65,7 @@ public class ApartDealInsertJobConfig {
                 .validator(new YearMonthParameterValidator())
                 .start(guLawdCdStep)
                 .on("CONTINUABLE").to(aptDealInsertStep).next(guLawdCdStep)  // ExitStatus가 CONTINUABLE로 존재하면 contextPrintStep, guLawdCdStep를 수행
-                .from(guLawdCdStep)                                                // ExitStatus가 CONTINUABLE이 아니면 종료
+                .from(guLawdCdStep)                                                 // ExitStatus가 CONTINUABLE이 아니면 종료
                 .on("*").end()
                 .end()
 //                .next(aptDealInsertStep)
@@ -88,8 +88,11 @@ public class ApartDealInsertJobConfig {
 
     @Bean
     @StepScope
-    public Tasklet guLawdCdTasklet(LawdRepository lawdRepository) {
-        return new GuLawdTasklet(lawdRepository);
+    public Tasklet guLawdCdTasklet(
+            LawdRepository lawdRepository
+            , @Value("#{jobParameters['guLawdCd']}") String guLawdCd
+    ) {
+        return new GuLawdTasklet(lawdRepository, guLawdCd);
     }
 
     @Bean
@@ -111,12 +114,19 @@ public class ApartDealInsertJobConfig {
             , ItemWriter<AptDealDto> aptDealWriter
     ) {
         return stepBuilderFactory.get("aptDealInsertStep")
-                .<AptDealDto, AptDealDto>chunk(100)
+                .<AptDealDto, AptDealDto>chunk(1000)
                 .reader(aptDealResourceReader)
                 .writer(aptDealWriter)
                 .build();
     }
 
+    /**
+     * 공공 데이터 포털에서 제공하는 아파트 실거래가 API를 통해 정보를 가져오는 ItemReader 구문
+     * @param yearMonth 아파트 매매 연월 기간 정보
+     * @param guLawdCd 법정동 코드
+     * @param jaxb2Marshaller 공공 데이터 포털 API가 XML 형태이며 이를 읽기 위한 파라미터
+     * @return
+     */
     @Bean
     @StepScope
     public StaxEventItemReader<AptDealDto> aptDealResourceReader(

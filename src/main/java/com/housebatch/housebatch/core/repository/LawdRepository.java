@@ -23,7 +23,7 @@ public interface LawdRepository extends JpaRepository<Lawd, Long> {
      * WHERE
      *     exist = 1
      *     AND lawd_cd not like '%00000000'
-     * 
+     *
      * ** JPA에서 DISTINCT 쿼리와 같은 문법은 제공하지 않음
      *    - @Query Annotation을 사용 : https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods.at-query
      *    - MySQL Query를 Jpa Query로 수정이 필요

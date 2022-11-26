@@ -3,14 +3,19 @@ package com.housebatch.housebatch.job.apt;
 import com.housebatch.housebatch.core.repository.LawdRepository;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.ExitStatus;
+import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.StepContribution;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.util.StringUtils;
 
+import java.awt.*;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -22,23 +27,37 @@ import java.util.List;
  * 3. itemCount : 남아있는 아이템(구 코드)의 개수
  */
 
+@Slf4j
 @RequiredArgsConstructor
 public class GuLawdTasklet implements Tasklet {
 
     private final LawdRepository lawdRepository;
     private List<String> guLawdCdList;
     private int itemCount;
+    private String guLawdCd;
 
     private static final String KEY_ITEM_COUNT = "itemCount";
     private static final String KEY_GU_LAWD_CD_LIST = "guLawdCdList";
     private static final String KEY_GU_LAWD_CD = "guLawdCd";
 
+    public GuLawdTasklet(LawdRepository lawdRepository, String guLawdCd) {
+        this.lawdRepository = lawdRepository;
+        this.guLawdCd = guLawdCd;
+    }
+
+    /**
+     *
+     * @param contribution mutable state to be passed back to update the current step execution
+     * @param chunkContext attributes shared between invocations but not between restarts
+     * @return
+     * @throws Exception
+     */
     @Override
     public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
 
-        ExecutionContext executionContext = getExecutionContext(chunkContext);
-        initList(executionContext);
-        initItemCount(executionContext);
+        ExecutionContext executionContext = getExecutionContext(chunkContext);  // BATCH_STEP_EXECUTION_CONTEXT 내에 저장된 메타데이터 조회
+        initList(executionContext);                                             // 법정동 코드 초기화
+        initItemCount(executionContext);                                        // 법정동 코드 개수 초기화
 
         if (itemCount == 0) {
             contribution.setExitStatus(ExitStatus.COMPLETED);
@@ -51,7 +70,6 @@ public class GuLawdTasklet implements Tasklet {
          * 원인은 getJobExecutionContext()의 메소드에서 MAP은 읽기만 가능하고 쓰기는 불가능한 형태이기 때문에 발생하게 된다.
          * - chunkContext.getStepContext().getJobExecutionContext().put(KEY_GU_LAWD_CD, guLawdCdList.get(itemCount - 1));
          */
-
         executionContext.putString(KEY_GU_LAWD_CD, guLawdCdList.get(itemCount - 1));
         executionContext.putInt(KEY_ITEM_COUNT, itemCount - 1);
 
@@ -82,6 +100,12 @@ public class GuLawdTasklet implements Tasklet {
         return stepExecution.getJobExecution().getExecutionContext();
     }
 
+    /**
+     * ExecutionContext 초기화 기능 제공<br>
+     * - ExecutionContext 저장된 키 중 guLawdCdList가 존재하지 않을 경우 : 데이터베이스에서 법정동 코드 조회하여 ExecutionContext에 guLawdCdList와 itemCount 저장
+     * - ExecutionContext 저장된 키 중 guLawdCdList가 존재하는 경우 : ExecutionContext룰 사용하여 법정동 코드 guLawdCdList에 저장
+     * @param executionContext
+     */
     private void initList(ExecutionContext executionContext) {
 
         /*
@@ -102,6 +126,10 @@ public class GuLawdTasklet implements Tasklet {
          */
         if (executionContext.containsKey(KEY_GU_LAWD_CD_LIST)) {
             guLawdCdList = (List<String>) executionContext.get(KEY_GU_LAWD_CD_LIST);
+        } else if(StringUtils.hasText(guLawdCd)) {
+            guLawdCdList = Arrays.asList(guLawdCd);
+            executionContext.put(KEY_GU_LAWD_CD_LIST, guLawdCdList);
+            executionContext.putInt(KEY_ITEM_COUNT, guLawdCdList.size());
         } else {
             guLawdCdList = lawdRepository.findDistinctGuLawdCd();
             executionContext.put(KEY_GU_LAWD_CD_LIST, guLawdCdList);
@@ -109,6 +137,12 @@ public class GuLawdTasklet implements Tasklet {
         }
     }
 
+    /**
+     * ExecutionContext 데이터 개수 초기화 기능 제공<br>
+     * - ExecutionContext에 저장된 키 중 itemCount가 존재하지 않을 경우 : guLawdCdList를 사용하여 itemCount 초기화
+     * - ExecutionContext에 저장된 키 중 itemCount가 존재하는 경우 : ExecutionContext룰 사용하여 법정동 개수를 itemCount에 저장
+     * @param executionContext
+     */
     private void initItemCount(ExecutionContext executionContext) {
         if (executionContext.containsKey(KEY_ITEM_COUNT)) {
             itemCount = executionContext.getInt(KEY_ITEM_COUNT);
